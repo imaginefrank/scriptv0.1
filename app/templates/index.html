@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Workflow Drafting Sandbox</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        body { display: grid; grid-template-columns: 3fr 1fr; gap: 1rem; min-height: 100vh; }
+        main { padding: 1rem; }
+        aside { background: #f6f6f8; padding: 1rem; border-left: 1px solid #dedede; display: flex; flex-direction: column; }
+        .section { margin-bottom: 1.5rem; }
+        .variants { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+        footer { grid-column: 1 / -1; padding: 1rem; border-top: 1px solid #ccc; }
+        .clips { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .history { max-height: 150px; overflow-y: auto; font-size: 0.9rem; }
+        .job-table { width: 100%; }
+    </style>
+</head>
+<body>
+    <main>
+        <header class="section">
+            <h1>Phase 1–5 Control Room</h1>
+            <p>Version {{ state.version }} · Updated {{ state.updated_at }}</p>
+        </header>
+
+        <section class="section">
+            <h2>Document with Manual Overrides</h2>
+            <form method="post" action="/update-document">
+                <label>
+                    <input type="checkbox" name="override_title" {% if state.overrides.title %}checked{% endif %}>
+                    Manual override: Title
+                </label>
+                <input name="title" placeholder="Title" value="{{ state.document.title }}" {% if not state.overrides.title %}disabled{% endif %}>
+
+                <label>
+                    <input type="checkbox" name="override_summary" {% if state.overrides.summary %}checked{% endif %}>
+                    Manual override: Summary
+                </label>
+                <textarea name="summary" placeholder="Summary" {% if not state.overrides.summary %}disabled{% endif %}>{{ state.document.summary }}</textarea>
+
+                <label>
+                    <input type="checkbox" name="override_content" {% if state.overrides.content %}checked{% endif %}>
+                    Manual override: Content
+                </label>
+                <textarea name="content" rows="6" placeholder="Content" {% if not state.overrides.content %}disabled{% endif %}>{{ state.document.content }}</textarea>
+
+                <button type="submit">Save document</button>
+            </form>
+        </section>
+
+        <section class="section">
+            <h2>Multi-variant drafting</h2>
+            <form method="post" action="/start-draft">
+                <label>Base prompt <input name="base_prompt" placeholder="What should the model draft?" required></label>
+                <label>Context for variants <textarea name="context" rows="3" placeholder="Research, key facts, and constraints."></textarea></label>
+                <label>How many variants? <input type="number" name="variant_count" value="3" min="1" max="5"></label>
+                <button type="submit">Send to queue</button>
+            </form>
+            <div class="variants">
+                {% for variant in state.variants %}
+                <article>
+                    <header><strong>Variant {{ loop.index }}</strong> <small>{{ variant.created_at }}</small></header>
+                    <p><em>Prompt:</em> {{ variant.prompt }}</p>
+                    <pre>{{ variant.text }}</pre>
+                    {% if variant.polished %}
+                        <details>
+                            <summary>Regressive polish passes ({{ variant.polished|length }})</summary>
+                            <ul>
+                                {% for polish in variant.polished %}
+                                <li><pre>{{ polish }}</pre></li>
+                                {% endfor %}
+                            </ul>
+                        </details>
+                    {% endif %}
+                    <form method="post" action="/start-polish">
+                        <input type="hidden" name="variant_id" value="{{ variant.id }}">
+                        <label>Polish notes <input name="notes" placeholder="Regressive instructions"></label>
+                        <button type="submit">Queue polish</button>
+                    </form>
+                </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Async job queue</h2>
+            <table class="job-table">
+                <thead>
+                    <tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th></tr>
+                </thead>
+                <tbody>
+                    {% for job in jobs %}
+                    <tr>
+                        <td style="max-width: 240px; overflow: hidden; text-overflow: ellipsis;">{{ job.id }}</td>
+                        <td>{{ job.type }}</td>
+                        <td>{{ job.status }}</td>
+                        <td>{{ job.created_at }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="section">
+            <h2>Static media clips</h2>
+            <div class="clips">
+                {% for clip in clips %}
+                    <a href="/static/clips/{{ clip }}" target="_blank">{{ clip }}</a>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Workspace history</h2>
+            <div class="history">
+                <ul>
+                {% for item in state.history|reverse %}
+                    <li>v{{ item.version }} @ {{ item.updated_at }} — {{ item.note }}</li>
+                {% endfor %}
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <aside>
+        <h3>Persistent scratchpad</h3>
+        <form method="post" action="/update-scratchpad" style="flex: 1; display: flex; flex-direction: column;">
+            <textarea name="scratchpad" style="flex: 1;" placeholder="Notes, experiments, citations...">{{ state.scratchpad }}</textarea>
+            <button type="submit" style="margin-top: 0.5rem;">Save scratchpad</button>
+        </form>
+    </aside>
+
+    <footer>
+        <p>Estimated token cost: {{ token_cost }} tokens · Phase coverage: drafting ➜ variants ➜ regressive polish ➜ persisted state with version {{ state.version }}.</p>
+    </footer>
+</body>
+</html>

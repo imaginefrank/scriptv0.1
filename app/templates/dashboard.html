@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace State</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; background: #f5f7fb; }
+    h1 { color: #1c2b4a; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    th { background: #e1e8f5; }
+    .flag-true { color: #0f865c; font-weight: bold; }
+    .flag-false { color: #c0392b; font-weight: bold; }
+    .tag { display: inline-block; padding: 0.2rem 0.5rem; margin: 0.1rem; background: #eef3ff; border-radius: 4px; }
+    .validation { color: #a15c00; }
+    .history { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Cluster State</h1>
+  {% if state.clusters %}
+  <table>
+    <thead>
+      <tr>
+        <th>Cluster</th>
+        <th>Market Movement</th>
+        <th>Visual Texture</th>
+        <th>Neutral Fact Card</th>
+        <th>Validation</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cluster in state.clusters %}
+      <tr>
+        <td>
+          <strong>{{ cluster.title }}</strong><br>
+          <small>ID: {{ cluster.cluster_id }}</small><br>
+          <small>Growth: {{ cluster.metrics.growth_percentage }}%, Views: {{ "{:,}".format(cluster.metrics.total_views) }},
+            Accel: {{ cluster.metrics.acceleration_index }}</small>
+        </td>
+        <td>
+          <span class="{{ 'flag-true' if cluster.market_movement_flag else 'flag-false' }}">{{ 'Yes' if cluster.market_movement_flag else 'No' }}</span>
+        </td>
+        <td>
+          <div>
+            <strong>Tags:</strong>
+            {% for tag in cluster.visual_texture.visual_tags %}
+              <span class="tag">{{ tag }}</span>
+            {% endfor %}
+          </div>
+          <div>
+            <strong>Transcript cues:</strong>
+            <ul>
+              {% for cue in cluster.visual_texture.transcript_cues %}
+                <li>{{ cue }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div>
+            <strong>Engagement:</strong>
+            <ul>
+              {% for note in cluster.visual_texture.engagement_notes %}
+                <li>{{ note }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </td>
+        <td>{{ cluster.neutral_fact_card or '—' }}</td>
+        <td class="validation">
+          {% if cluster.validation.operator_prompts %}
+            <ul>
+              {% for prompt in cluster.validation.operator_prompts %}
+                <li>{{ prompt }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <span>All clear</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p>No clusters ingested yet.</p>
+  {% endif %}
+
+  <div class="history">
+    <h2>State History</h2>
+    {% if state.history %}
+      <ul>
+        {% for item in state.history %}
+          <li>
+            <strong>{{ item.cluster_id }}</strong> @ {{ item.ingested_at }} — Market movement: {{ 'Yes' if item.market_movement_flag else 'No' }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No history available.</p>
+    {% endif %}
+  </div>
+</body>
+</html>
