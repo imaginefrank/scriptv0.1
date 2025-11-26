@@ -1,13 +1,11 @@
-"""
-Toolkit loader and selection utilities.
-"""
+"""Toolkit loader and selection utilities."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Sequence
-from pathlib import Path
 import json
 import random
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Iterable, List, Sequence
 
 CATEGORY_NAMES: List[str] = [
     "Storyboarding",
@@ -65,7 +63,6 @@ _DEF_EXAMPLES = [
     "Let the silence linger just long enough to become the joke.",
 ]
 
-
 _DEF_CORE = [
     "Push the idea until the audience anticipates the turn, then bend it once more.",
     "Treat visuals like verbs—every frame should act on the joke.",
@@ -78,7 +75,7 @@ def _build_tool(index: int) -> Tool:
     variant = (index % 15) + 1
     core_principle = f"{category} discipline #{(index % 7) + 1}: {_DEF_CORE[index % len(_DEF_CORE)]}"
     tags = [category.lower().replace(" ", "-"), "phase1", "visual", f"variant-{(index % 5) + 1}"]
-    examples = [f"{category} example {variant}: {_DEF_EXAMPLES[index % len(_DEF_EXAMPLES)]}"]
+    examples = [f"{category} example {variant:03d}: {_DEF_EXAMPLES[index % len(_DEF_EXAMPLES)]}"]
     return Tool(
         name=f"{category} Tool {variant:03d}",
         category=category,
@@ -127,9 +124,7 @@ def select_tools(
     ]
     scored.sort(key=lambda pair: pair[1], reverse=True)
 
-    selected: List[Tool] = []
     if contrarian:
-        # Prefer the middle of the pack to intentionally surface left-field picks.
         midpoint = len(scored) // 2
         contrarian_pool = scored[midpoint: midpoint + (limit * 2)]
         random.shuffle(contrarian_pool)
@@ -137,7 +132,6 @@ def select_tools(
     else:
         selected = [tool for tool, score in scored if score > 0][:limit]
 
-    # Fallback mix ensures multiple categories are represented.
     used_categories = {tool.category for tool in selected}
     if len(selected) < fallback_mix:
         for category in toolkit.categories:
@@ -156,4 +150,3 @@ def save_selection(selection: List[Tool], path: Path) -> None:
         "toolkit_selection": [tool.__dict__ for tool in selection],
     }
     path.write_text(json.dumps(payload, indent=2))
-
