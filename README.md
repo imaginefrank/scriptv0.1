@@ -1,127 +1,47 @@
 # Script Ops console
 
-A lightweight single-page prototype for managing scripted operations with explicit checkpoints, sidecar context, and live cost tracking.
+A collection of lightweight prototypes for managing scripted operations and creative drafting. The repository currently includes:
 
-## Features
-- Phase-gated navigation that requires filter selection, toolkit choice, variant approval, and rollback confirmation before moving forward.
-- Transcript workspace with split-screen or PiP clips plus tags, summary, and sentiment presented in a sidebar.
-- Token usage tracking per API call with real cost estimates surfaced in the footer.
-- Simulated queue for long-running tasks with loading indicators that keep the UI responsive.
+1. **Script Ops UI (static/Express)** — A single-page UI for phase-gated decisions, transcript management, clip previews, token estimates, and a simulated async queue (`index.html`, `app.js`, `style.css`, served by `server.js`).
+2. **Workflow Drafting Sandbox (FastAPI)** — HTMX-style server-rendered workspace with persistent JSON state, async job queue stubs, manual overrides, scratchpad, and token-cost footer (`app/main.py`, templates under `app/templates`).
+3. **Beat chaining API (Flask)** — Minimal API for chaining beat contexts and handling operator approvals or overrides (`app.py`).
 
-## Running locally
-Open `index.html` in a modern browser. Network access is used only to load the sample clip.
-# scriptv0.1
-
-Prototype UI for polishing narrative beats with regressive rewrite controls.
-
-## Running the app
+## Running the Script Ops UI
 
 ```bash
 npm install
 npm start
 ```
 
-The server hosts the UI at http://localhost:3000 and persists beat versions in `workspace_state.json`.
-A lightweight Flask workspace for drafting beats with chained context, persona-aware variants, and manual override tracking.
+The Express server hosts the static UI at http://localhost:3000 and persists beat versions in `workspace_state.json`.
 
-## Quick start
+## Running the Workflow Drafting Sandbox
+
+```bash
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Open http://localhost:8000 to access the workspace. Cluster ingestion views are available at http://localhost:8000/clusters.
+
+## Running the Beat chaining API
 
 ```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-Open http://localhost:5000 to view the UI.
-A lightweight console tool for assembling scripted segments with archetypes, beats, and runtime checks.
+Open http://localhost:5000 to work with the beat chaining endpoints or serve the static `index.html`.
 
-## Features
-- Predefined archetypes with beat slots, durations, and guidance.
-- State tracking for selected archetype, beat text, clip selections, and operator approvals.
-- Preview of beats with split-screen or PiP style context to pair narration and clips.
-- Runtime estimation using spoken word-count/2.5 plus clip durations, flagging segments over a 15-minute cap.
-- Continuity checks to ensure Setup leads logically into Clip, with an operator gate to approve transitions.
+## State files
 
-## Getting started
-Run the console UI and follow the prompts to choose an archetype, add beat text, set clip in/out points, and review pacing:
+- `workspace_state.json` — Shared workspace state for the Script Ops UI, FastAPI sandbox, and Flask beat chaining prototype.
+- `cluster_state.json` — Cluster ingestion state for the FastAPI dashboard.
 
-```bash
-python -m app.main
-```
+## Features at a glance
 
-Use the numbered actions to edit beats, preview layouts, check runtime against the budget, and approve transitions once continuity looks correct.
-This prototype loads a 329-tool creative toolkit, scores Phase 1 picks by tags/visual texture, and generates comedic angles that can be reviewed and overridden from a lightweight UI.
-
-## Running the API/UI
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Start the FastAPI server:
-   ```bash
-   uvicorn main:app --reload
-   ```
-3. Open [http://localhost:8000/ui](http://localhost:8000/ui) to review picks and angles.
-
-## Key endpoints
-- `POST /select` — Select tools by tags/visual texture with optional contrarian mix; saves to `workspace_state.json`.
-- `POST /angles` — Enqueue comedic angle generation (role/context/tool/core principle/example baked into prompts); results persisted with risk scores.
-- `POST /angles/{id}/choose` — Mark an angle as the chosen one.
-- `POST /angles/{id}/override` — Override an angle with operator-provided copy.
-- `GET /workspace-state` — Inspect saved selections and angles.
-
-## State
-Generated selections and angles are stored in `workspace_state.json` so operators can review and iterate.
-FastAPI service for ingesting cluster data, deriving Phase 1 insights, and surfacing UI history.
-
-## Running locally
-
-```bash
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
-
-## Endpoints
-
-- `POST /ingest-clusters`: Ingest clusters using the schema defined in `app/main.py`, derive market movement flags, visual texture, and neutral fact cards, validate representative clips, and persist the results to `workspace_state.json`.
-- `GET /state`: Returns the current persisted state and history.
-- `GET /`: Renders a simple dashboard of the derived data.
-- `GET /clusters/{cluster_id}`: Fetch an individual cluster entry.
-# Workflow Drafting Sandbox
-
-A FastAPI + HTMX-style server-rendered workspace for experimenting with Phase 1–5 creative flows: persisted JSON state, manual override editing, asynchronous AI job queue stubs, persistent scratchpad, local static media, and multi-variant drafting with regressive polish.
-
-## Setup
-1. Ensure Python 3.10+ is available.
-2. (Recommended) Create and activate a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install fastapi uvicorn jinja2 python-multipart
-   ```
-
-## Running the app
-Start the development server from the repository root:
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-Visit `http://localhost:8000` to access the UI.
-
-## Features
-- **JSON workspace persistence with versioning:** All edits are stored in `workspace_state.json`, with version increments and a human-readable history log.
-- **Static media for clips:** Files under `app/static/clips/` are served via `/static/clips/...` and linked in the UI. Replace the placeholder `readme.txt` with your own clips.
-- **Async job queue for AI generations:** Drafting and regressive polish jobs are queued in-memory and processed by a background worker; results are appended to variants and polish history on completion.
-- **Manual overrides on editable fields:** Title, summary, and content fields respect override toggles to demonstrate human-in-the-loop control.
-- **Persistent scratchpad sidebar:** Notes are stored alongside the workspace state and remain visible across page loads.
-- **Token-cost footer:** An approximate token counter aggregates document, scratchpad, and variant text to highlight budget awareness.
-- **Multi-variant drafting & regressive polish:** Queue multiple draft variants at once, then queue polish passes per variant to iteratively refine outputs.
-
-## Data files
-- `workspace_state.json`: persisted workspace state with history and version metadata.
-- `app/static/clips/`: location for locally hosted media references.
-
-## Notes
-- The background worker is an in-memory stub intended to model asynchronous AI calls; restart the server to reset the job queue.
-- The `/state` endpoint returns the current persisted JSON payload for inspection or integration.
+- Phase-gated navigation with explicit approvals.
+- Transcript workspace with tags, summary, and sentiment sidebar.
+- Token usage tracking and simulated async queue.
+- Workflow drafting with persistent history, manual overrides, scratchpad, and regressive polish queue.
+- Cluster ingestion that normalizes tags, checks validation gates, and renders a dashboard view.

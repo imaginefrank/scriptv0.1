@@ -1,21 +1,23 @@
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from flask import Flask, jsonify, request
 
+app = Flask(__name__, static_folder="static", static_url_path="")
+
 STATE_PATH = Path("workspace_state.json")
-DEFAULT_STATE = {"beats": []}
-
-
-app = Flask(__name__, static_folder="static", static_url_path="/static")
+DEFAULT_STATE: Dict[str, object] = {"beats": []}
 
 
 def load_state() -> Dict:
     if not STATE_PATH.exists():
         STATE_PATH.write_text(json.dumps(DEFAULT_STATE, indent=2))
-    with STATE_PATH.open() as f:
-        return json.load(f)
+        return json.loads(STATE_PATH.read_text())
+    with STATE_PATH.open() as handle:
+        return json.load(handle)
 
 
 def save_state(state: Dict) -> None:

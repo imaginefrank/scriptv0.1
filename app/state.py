@@ -1,12 +1,15 @@
-"""State management for archetype beats, clips, and runtime checks."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+import time
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .archetypes import Archetype, BeatSlot
+from app.archetypes import Archetype, BeatSlot
 
 FIFTEEN_MINUTES = 15 * 60
+STATE_PATH = Path("workspace_state.json")
 
 
 @dataclass
@@ -104,17 +107,9 @@ class ScriptState:
     def _require_slot(self, slot_name: str) -> None:
         if slot_name not in self.beats:
             raise KeyError(f"Slot '{slot_name}' not in current archetype")
-"""Workspace state helpers."""
-from __future__ import annotations
 
-from dataclasses import asdict
-from pathlib import Path
-from typing import Dict, List
-import json
-import time
 
-STATE_PATH = Path("workspace_state.json")
-
+# Workspace state helpers for toolkit selection flows
 
 def load_state(path: Path = STATE_PATH) -> Dict:
     if not path.exists():
@@ -170,4 +165,3 @@ def override_angle(angle_id: str, new_text: str, path: Path = STATE_PATH) -> Dic
             break
     persist_state(state, path)
     return state
-

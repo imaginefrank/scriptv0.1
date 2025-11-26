@@ -1,11 +1,10 @@
 """Comedic angle generation and queue emulation."""
 from __future__ import annotations
 
+import itertools
+import uuid
 from dataclasses import dataclass
 from typing import Dict, List, Sequence
-import itertools
-import random
-import uuid
 
 from app.toolkit import Tool
 
@@ -77,4 +76,3 @@ def generate_comedic_angles(
         )
 
     return angles
-

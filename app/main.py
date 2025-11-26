@@ -1,153 +1,27 @@
-"""Interactive console UI for selecting archetypes, editing beats, and checking runtime."""
 from __future__ import annotations
 
-import sys
-
-from .archetypes import available_archetypes, get_archetype
-from .state import ScriptState
-
-
-def prompt_archetype() -> ScriptState:
-    names = available_archetypes()
-    print("Available archetypes:")
-    for idx, name in enumerate(names, start=1):
-        print(f"  {idx}. {name}")
-    while True:
-        choice = input("Select archetype by number: ").strip()
-        if not choice.isdigit() or int(choice) not in range(1, len(names) + 1):
-            print("Invalid selection. Try again.")
-            continue
-        archetype = get_archetype(names[int(choice) - 1])
-        print(f"Loaded archetype: {archetype.name} — {archetype.description}\n")
-        return ScriptState.from_archetype(archetype)
-
-
-def edit_text(state: ScriptState) -> None:
-    slot_name = input("Enter beat name to edit text: ").strip()
-    try:
-        slot = state.beats[slot_name].slot
-    except KeyError:
-        print(f"Beat '{slot_name}' not found.\n")
-        return
-    print(f"Guidance for {slot.name}: {slot.guidance}")
-    text = input("New text: ")
-    state.set_text(slot_name, text)
-    print(f"Updated text for {slot_name}.\n")
-
-
-def select_clip(state: ScriptState) -> None:
-    slot_name = input("Enter beat name to attach a clip: ").strip()
-    if slot_name not in state.beats:
-        print(f"Beat '{slot_name}' not found.\n")
-        return
-    clip_id = input("Clip id/slug: ").strip()
-    try:
-        in_point = float(input("In point (seconds): ").strip())
-        out_point = float(input("Out point (seconds): ").strip())
-    except ValueError:
-        print("Invalid time entry.\n")
-        return
-    if out_point <= in_point:
-        print("Out point must be greater than in point.\n")
-        return
-    state.set_clip(slot_name, clip_id, in_point, out_point)
-    print(f"Clip set for {slot_name}: {clip_id} ({in_point:.2f}s - {out_point:.2f}s).\n")
-
-
-def preview(state: ScriptState) -> None:
-    view_mode = input("Preview mode (split/pip): ").strip().lower() or "split"
-    divider = "|" if view_mode == "split" else "•"
-    print("\nPreview with visual texture context:")
-    for slot_name, beat in state.beats.items():
-        clip_repr = (
-            f"[{beat.clip.clip_id} {beat.clip.in_point:.1f}-{beat.clip.out_point:.1f}s]"
-            if beat.clip
-            else "[no clip selected]"
-        )
-        text_snippet = beat.text if beat.text else "<empty narration>"
-        print(f"{slot_name:>8} {divider} {clip_repr} {divider} {text_snippet}")
-    print()
-
-
-def show_runtime(state: ScriptState) -> None:
-    total, per_beat = state.runtime_summary()
-    print("Runtime summary (spoken word-count/2.5 + clip durations):")
-    for slot_name, runtime in per_beat.items():
-        flag = " ⚠️" if slot_name in state.over_budget_beats() else ""
-        print(f"  {slot_name:>10}: {runtime:6.1f}s{flag}")
-    print(f"Total runtime: {total/60:.2f} minutes")
-    if state.over_budget_beats():
-        print("Over-budget beats (15-minute cap breached):", ", ".join(state.over_budget_beats()))
-    print()
-
-
-def continuity(state: ScriptState) -> None:
-    notes = state.continuity_notes()
-    if not notes:
-        print("Continuity check: Setup flows into Clip and operator gate cleared.\n")
-        return
-    print("Continuity/transition guidance:")
-    for note in notes:
-        print(f" - {note}")
-    print()
-
-
-def approve_gate(state: ScriptState) -> None:
-    slot_name = input("Enter beat to approve (usually 'Clip'): ").strip()
-    if slot_name not in state.beats:
-        print("Unknown beat.\n")
-        return
-    state.approve_transition(slot_name)
-    print(f"Operator gate cleared for {slot_name}.\n")
-
-
-def main() -> int:
-    state = prompt_archetype()
-    actions = {
-        "1": ("Edit beat text", edit_text),
-        "2": ("Select clip and in/out", select_clip),
-        "3": ("Preview layout (split/PiP)", preview),
-        "4": ("Show runtime + budget flags", show_runtime),
-        "5": ("Continuity + operator gate", continuity),
-        "6": ("Approve transition", approve_gate),
-        "0": ("Exit", None),
-    }
-
-    while True:
-        print("Actions:")
-        for key, (label, _) in actions.items():
-            print(f"  {key}. {label}")
-        choice = input("Select action: ").strip()
-        if choice == "0":
-            return 0
-        if choice not in actions:
-            print("Invalid option.\n")
-            continue
-        _, handler = actions[choice]
-        if handler:
-            handler(state)
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-from __future__ import annotations
-
+import copy
 import json
+import threading
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from queue import Queue
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, validator
-from starlette.requests import Request
 
-app = FastAPI(title="Cluster Ingestion Service")
-templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+# ----------------------------
+# Cluster ingestion models
+# ----------------------------
 
-STATE_FILE = Path(__file__).resolve().parent.parent / "workspace_state.json"
-STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+CLUSTER_STATE_FILE = Path("cluster_state.json")
+CLUSTER_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 class RepresentativeClip(BaseModel):
@@ -181,7 +55,7 @@ class ClusterPayload(BaseModel):
     def dedupe_visual_tags(cls, value: List[str]) -> List[str]:
         if value is None:
             return []
-        deduped = []
+        deduped: List[str] = []
         for tag in value:
             normalized = tag.strip()
             if normalized and normalized.lower() not in {t.lower() for t in deduped}:
@@ -200,18 +74,17 @@ SENTIMENT_GATE = -0.1
 
 
 def detect_market_movement(cluster: ClusterPayload) -> bool:
-    metrics_pass = (
+    return (
         cluster.growth_percentage >= GROWTH_THRESHOLD
         and cluster.total_views >= TOTAL_VIEWS_THRESHOLD
         and cluster.acceleration_index >= ACCELERATION_THRESHOLD
+        and cluster.sentiment_score > SENTIMENT_GATE
     )
-    sentiment_pass = cluster.sentiment_score >= SENTIMENT_GATE
-    return metrics_pass and sentiment_pass
 
 
-def derive_visual_texture(cluster: ClusterPayload) -> dict:
+def derive_visual_texture(cluster: ClusterPayload) -> Dict[str, List[str]]:
     aggregated_tags = sorted({tag.strip() for tag in cluster.visual_tags if tag.strip()})
-    cues = []
+    cues: List[str] = []
     if cluster.transcript_summary:
         sentences = [s.strip() for s in cluster.transcript_summary.split(".") if s.strip()]
         cues = sentences[:3]
@@ -231,7 +104,7 @@ def neutralize_fact_card(fact_card: Optional[str]) -> Optional[str]:
     if not fact_card:
         return None
     sentences = [s.strip() for s in fact_card.split(".") if s.strip()]
-    neutralized = []
+    neutralized: List[str] = []
     biased_markers = {"should", "must", "terrible", "amazing", "shocking"}
     for sentence in sentences:
         words = sentence.split()
@@ -244,7 +117,7 @@ def neutralize_fact_card(fact_card: Optional[str]) -> Optional[str]:
     return ". ".join(neutralized) + "."
 
 
-def evaluate_validation(cluster: ClusterPayload) -> dict:
+def evaluate_validation(cluster: ClusterPayload) -> Dict[str, Any]:
     missing_clips = len(cluster.representative_clips) == 0
     garbled_transcripts = any(
         clip.is_garbled or clip.transcript_is_missing() for clip in cluster.representative_clips
@@ -263,106 +136,30 @@ def evaluate_validation(cluster: ClusterPayload) -> dict:
     }
 
 
-def load_state() -> dict:
-    if not STATE_FILE.exists():
+def load_cluster_state() -> Dict[str, Any]:
+    if not CLUSTER_STATE_FILE.exists():
         return {"clusters": [], "history": []}
-    with STATE_FILE.open("r", encoding="utf-8") as handle:
+    with CLUSTER_STATE_FILE.open("r", encoding="utf-8") as handle:
         try:
             return json.load(handle)
         except json.JSONDecodeError:
             return {"clusters": [], "history": []}
 
 
-def persist_state(state: dict) -> None:
-    with STATE_FILE.open("w", encoding="utf-8") as handle:
+def persist_cluster_state(state: Dict[str, Any]) -> None:
+    with CLUSTER_STATE_FILE.open("w", encoding="utf-8") as handle:
         json.dump(state, handle, indent=2, ensure_ascii=False)
-
-
-@app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    state = load_state()
-    return templates.TemplateResponse("dashboard.html", {"request": request, "state": state})
-
-
-@app.get("/state")
-async def get_state():
-    return load_state()
 
 
 class ClusterIngestionRequest(BaseModel):
     clusters: List[ClusterPayload]
 
 
-@app.post("/ingest-clusters")
-async def ingest_clusters(payload: ClusterIngestionRequest):
-    if not payload.clusters:
-        raise HTTPException(status_code=400, detail="No clusters provided")
+# ----------------------------
+# Workflow drafting workspace
+# ----------------------------
 
-    state = load_state()
-    now = datetime.utcnow().isoformat() + "Z"
-    ingested_clusters = []
-
-    for cluster in payload.clusters:
-        validation = evaluate_validation(cluster)
-        market_movement = detect_market_movement(cluster)
-        visual_texture = derive_visual_texture(cluster)
-        neutral_fact_card = neutralize_fact_card(cluster.fact_card)
-
-        cluster_record = {
-            "cluster_id": cluster.cluster_id,
-            "title": cluster.title,
-            "metrics": {
-                "growth_percentage": cluster.growth_percentage,
-                "total_views": cluster.total_views,
-                "acceleration_index": cluster.acceleration_index,
-                "sentiment_score": cluster.sentiment_score,
-            },
-            "market_movement_flag": market_movement,
-            "visual_texture": visual_texture,
-            "neutral_fact_card": neutral_fact_card,
-            "validation": validation,
-            "representative_clips": [clip.dict() for clip in cluster.representative_clips],
-            "ingested_at": now,
-        }
-        ingested_clusters.append(cluster_record)
-        state["clusters"].append(cluster_record)
-        state["history"].append(
-            {
-                "cluster_id": cluster.cluster_id,
-                "ingested_at": now,
-                "market_movement_flag": market_movement,
-                "visual_texture": visual_texture,
-                "neutral_fact_card": neutral_fact_card,
-                "validation": validation,
-            }
-        )
-
-    persist_state(state)
-    return {"ingested": ingested_clusters, "count": len(ingested_clusters)}
-
-
-@app.get("/clusters/{cluster_id}")
-async def get_cluster(cluster_id: str):
-    state = load_state()
-    for cluster in state.get("clusters", []):
-        if cluster.get("cluster_id") == cluster_id:
-            return cluster
-    raise HTTPException(status_code=404, detail="Cluster not found")
-import copy
-import json
-import threading
-import uuid
-from datetime import datetime
-from pathlib import Path
-from queue import Queue
-from typing import Any, Dict, List
-
-from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-
-STATE_PATH = Path("workspace_state.json")
+WORKSPACE_STATE_PATH = Path("workspace_state.json")
 
 
 def utc_now() -> str:
@@ -373,17 +170,22 @@ def approx_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+@dataclass
 class WorkspaceStateManager:
-    def __init__(self, state_path: Path) -> None:
-        self.state_path = state_path
-        self.lock = threading.Lock()
-        self.state: Dict[str, Any] = {}
+    state_path: Path
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    state: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
         self._ensure_state()
 
     def _ensure_state(self) -> None:
         if self.state_path.exists():
-            self.state = json.loads(self.state_path.read_text())
-            return
+            try:
+                self.state = json.loads(self.state_path.read_text())
+                return
+            except json.JSONDecodeError:
+                pass
 
         clips = [p.name for p in Path("app/static/clips").glob("*") if p.is_file()]
         self.state = {
@@ -506,9 +308,6 @@ class JobQueue:
         return sorted(self.jobs.values(), key=lambda j: j.get("created_at", ""), reverse=True)
 
 
-manager = WorkspaceStateManager(STATE_PATH)
-queue = JobQueue(on_complete=lambda kind, job: handle_completion(kind, job))
-
 def handle_completion(kind: str, job: Dict[str, Any]) -> None:
     payload = job.get("payload", {})
     if kind == "draft":
@@ -517,6 +316,7 @@ def handle_completion(kind: str, job: Dict[str, Any]) -> None:
             "text": job.get("result", ""),
             "created_at": job.get("created_at"),
             "prompt": payload.get("base", ""),
+            "polished": [],
         }
         manager.append_variant(variant)
     elif kind == "polish":
@@ -524,9 +324,90 @@ def handle_completion(kind: str, job: Dict[str, Any]) -> None:
         manager.add_polish(variant_id=variant_id, text=job.get("result", ""))
 
 
+manager = WorkspaceStateManager(WORKSPACE_STATE_PATH)
+queue = JobQueue(on_complete=handle_completion)
+
 app = FastAPI(title="Workflow Drafting")
 templates = Jinja2Templates(directory="app/templates")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+# ----------------------------
+# Cluster ingestion routes
+# ----------------------------
+
+
+@app.get("/clusters", response_class=HTMLResponse)
+async def cluster_dashboard(request: Request):
+    state = load_cluster_state()
+    return templates.TemplateResponse("dashboard.html", {"request": request, "state": state})
+
+
+@app.get("/clusters/state")
+async def get_cluster_state():
+    return load_cluster_state()
+
+
+@app.post("/clusters/ingest")
+async def ingest_clusters(payload: ClusterIngestionRequest):
+    if not payload.clusters:
+        raise HTTPException(status_code=400, detail="No clusters provided")
+
+    state = load_cluster_state()
+    now = datetime.utcnow().isoformat() + "Z"
+    ingested_clusters = []
+
+    for cluster in payload.clusters:
+        validation = evaluate_validation(cluster)
+        market_movement = detect_market_movement(cluster)
+        visual_texture = derive_visual_texture(cluster)
+        neutral_fact_card = neutralize_fact_card(cluster.fact_card)
+
+        cluster_record = {
+            "cluster_id": cluster.cluster_id,
+            "title": cluster.title,
+            "metrics": {
+                "growth_percentage": cluster.growth_percentage,
+                "total_views": cluster.total_views,
+                "acceleration_index": cluster.acceleration_index,
+                "sentiment_score": cluster.sentiment_score,
+            },
+            "market_movement_flag": market_movement,
+            "visual_texture": visual_texture,
+            "neutral_fact_card": neutral_fact_card,
+            "validation": validation,
+            "representative_clips": [clip.dict() for clip in cluster.representative_clips],
+            "ingested_at": now,
+        }
+        ingested_clusters.append(cluster_record)
+        state.setdefault("clusters", []).append(cluster_record)
+        state.setdefault("history", []).append(
+            {
+                "cluster_id": cluster.cluster_id,
+                "ingested_at": now,
+                "market_movement_flag": market_movement,
+                "visual_texture": visual_texture,
+                "neutral_fact_card": neutral_fact_card,
+                "validation": validation,
+            }
+        )
+
+    persist_cluster_state(state)
+    return {"ingested": ingested_clusters, "count": len(ingested_clusters)}
+
+
+@app.get("/clusters/{cluster_id}")
+async def get_cluster(cluster_id: str):
+    state = load_cluster_state()
+    for cluster in state.get("clusters", []):
+        if cluster.get("cluster_id") == cluster_id:
+            return cluster
+    raise HTTPException(status_code=404, detail="Cluster not found")
+
+
+# ----------------------------
+# Workspace drafting routes
+# ----------------------------
 
 
 def compute_token_cost(state: Dict[str, Any]) -> int:
