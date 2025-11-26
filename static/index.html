@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Beat Draft Workspace</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Beat Draft Workspace</h1>
+      <button id="generate-job">Generate Sample Drafts</button>
+    </header>
+    <main>
+      <section id="beats-container"></section>
+    </main>
+    <script src="/static/main.js"></script>
+  </body>
+<head>
+  <meta charset="utf-8">
+  <title>Toolkit Picks</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1.5rem; background: #0f172a; color: #e2e8f0; }
+    h1, h2 { color: #f8fafc; }
+    section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #1e293b; border-radius: 8px; background: #111827; }
+    label { display: block; margin-top: 0.5rem; }
+    input, textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; border-radius: 6px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
+    button { margin-top: 0.75rem; padding: 0.5rem 1rem; background: #22d3ee; border: none; border-radius: 6px; color: #0f172a; font-weight: bold; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .card { border: 1px solid #1f2937; padding: 0.75rem; border-radius: 6px; background: #0b1220; }
+    .tag { display: inline-block; background: #1d4ed8; color: #e2e8f0; padding: 0.15rem 0.45rem; margin-right: 0.25rem; margin-bottom: 0.25rem; border-radius: 4px; font-size: 12px; }
+    .angle-actions { margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Toolkit picks & comedic angles</h1>
+
+  <section>
+    <h2>Request toolkit selection</h2>
+    <label>Phase 1 visual texture/tags (comma or space separated)
+      <input id="texture" placeholder="vibrant contrast, silent beat" />
+    </label>
+    <label>Additional tags
+      <input id="tags" placeholder="visual, satire, meta" />
+    </label>
+    <label><input type="checkbox" id="contrarian" /> Contrarian mix</label>
+    <button onclick="requestSelection()">Select tools</button>
+  </section>
+
+  <section>
+    <h2>Generate comedic angles</h2>
+    <label>Role
+      <input id="role" value="Director" />
+    </label>
+    <label>Context
+      <textarea id="context" rows="3" placeholder="Describe the scene or campaign"></textarea>
+    </label>
+    <button onclick="generateAngles()">Enqueue angle options</button>
+  </section>
+
+  <section>
+    <h2>Selected tools</h2>
+    <div id="tools" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>Angles</h2>
+    <div id="angles" class="grid"></div>
+  </section>
+
+<script>
+async function loadState() {
+  const res = await fetch('/workspace-state');
+  const state = await res.json();
+  renderTools(state.toolkit_selection || []);
+  renderAngles(state.angles || []);
+}
+
+function renderTools(tools) {
+  const container = document.getElementById('tools');
+  container.innerHTML = '';
+  tools.forEach(tool => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<strong>${tool.name}</strong><div>${tool.core_principle}</div>`;
+    const tags = document.createElement('div');
+    tool.tags.forEach(tag => {
+      const span = document.createElement('span');
+      span.className = 'tag';
+      span.innerText = tag;
+      tags.appendChild(span);
+    });
+    card.appendChild(tags);
+    container.appendChild(card);
+  });
+}
+
+function renderAngles(angles) {
+  const container = document.getElementById('angles');
+  container.innerHTML = '';
+  angles.forEach(angle => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<strong>${angle.tool.name}</strong><p>${angle.angle}</p><small>Risk: ${angle.risk_score}</small><div>Status: ${angle.status}</div>`;
+    const actions = document.createElement('div');
+    actions.className = 'angle-actions';
+    const chooseBtn = document.createElement('button');
+    chooseBtn.innerText = 'Choose';
+    chooseBtn.onclick = () => chooseAngle(angle.id);
+    const overrideBtn = document.createElement('button');
+    overrideBtn.style.marginLeft = '0.5rem';
+    overrideBtn.innerText = 'Override';
+    overrideBtn.onclick = () => overrideAngle(angle.id);
+    actions.appendChild(chooseBtn);
+    actions.appendChild(overrideBtn);
+    card.appendChild(actions);
+    container.appendChild(card);
+  });
+}
+
+function parseTags(text) {
+  return text.split(/[,\s]+/).map(t => t.trim()).filter(Boolean);
+}
+
+async function requestSelection() {
+  const payload = {
+    visual_texture: document.getElementById('texture').value,
+    tags: parseTags(document.getElementById('tags').value),
+    contrarian: document.getElementById('contrarian').checked,
+  };
+  const res = await fetch('/select', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+  const data = await res.json();
+  renderTools(data.selected || []);
+}
+
+async function generateAngles() {
+  const payload = {
+    role: document.getElementById('role').value,
+    context: document.getElementById('context').value,
+    visual_texture: document.getElementById('texture').value,
+    tags: parseTags(document.getElementById('tags').value),
+    contrarian: document.getElementById('contrarian').checked,
+  };
+  await fetch('/angles', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+  setTimeout(loadState, 500);
+}
+
+async function chooseAngle(id) {
+  const res = await fetch(`/angles/${id}/choose`, { method: 'POST' });
+  const data = await res.json();
+  renderAngles(data.angles || []);
+}
+
+async function overrideAngle(id) {
+  const newText = prompt('Override angle text:');
+  if (!newText) return;
+  const res = await fetch(`/angles/${id}/override`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ angle: newText })});
+  const data = await res.json();
+  renderAngles(data.angles || []);
+}
+
+loadState();
+</script>
+</body>
+</html>
