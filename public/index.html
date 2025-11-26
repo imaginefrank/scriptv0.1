@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beat Polish Workspace</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Beat Polish Workspace</h1>
+    <p class="subtitle">Polish drafts, reuse rejected styles, and roll back versions.</p>
+  </header>
+  <main>
+    <aside id="beat-list"></aside>
+    <section id="beat-detail" aria-live="polite">
+      <p>Select a beat to view details.</p>
+    </section>
+  </main>
+  <template id="beat-template">
+    <article class="beat-panel">
+      <div class="beat-head">
+        <h2 class="beat-title"></h2>
+        <p class="beat-baseline"></p>
+      </div>
+      <div class="panel-grid">
+        <div>
+          <h3>Rejected options (style donors)</h3>
+          <div class="rejected-options"></div>
+        </div>
+        <div>
+          <h3>Operator instruction</h3>
+          <textarea class="instruction-input" rows="4" placeholder="Use tone of Option B..."></textarea>
+        </div>
+      </div>
+      <div class="prompt-preview">
+        <h3>Polish prompt preview</h3>
+        <pre class="prompt-text"></pre>
+      </div>
+      <div class="actions">
+        <button class="polish-btn">Create polished version</button>
+      </div>
+      <div class="versions">
+        <h3>Version history</h3>
+        <div class="version-list"></div>
+      </div>
+    </article>
+  </template>
+  <script src="main.js"></script>
+</body>
+</html>

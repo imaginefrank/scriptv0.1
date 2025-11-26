@@ -1,4 +1,45 @@
 {
+  "beats": [
+    {
+      "id": "beat-1",
+      "title": "Opening Scene",
+      "baseline": "The story opens on a quiet street where the protagonist observes the world waking up.",
+      "rejectedOptions": [
+        { "id": "opt-a", "name": "Option A", "text": "A bustling market greets the hero with noise and color." },
+        { "id": "opt-b", "name": "Option B", "text": "A silent dawn drapes the city in mist and memory." }
+      ],
+      "versions": [
+        {
+          "id": "ver-1",
+          "text": "Baseline draft for Opening Scene.",
+          "sourceOption": "baseline",
+          "instruction": "Initial baseline",
+          "timestamp": "2024-01-01T00:00:00.000Z",
+          "prompt": "Preserve meaning and structure of the baseline draft."
+        }
+      ],
+      "selectedVersionId": "ver-1"
+    },
+    {
+      "id": "beat-2",
+      "title": "Inciting Incident",
+      "baseline": "A mysterious message arrives, pushing the protagonist to take action.",
+      "rejectedOptions": [
+        { "id": "opt-c", "name": "Option C", "text": "An unexpected call sends the protagonist rushing out the door." }
+      ],
+      "versions": [
+        {
+          "id": "ver-2",
+          "text": "Baseline draft for Inciting Incident.",
+          "sourceOption": "baseline",
+          "instruction": "Initial baseline",
+          "timestamp": "2024-01-01T00:05:00.000Z",
+          "prompt": "Preserve meaning and structure of the baseline draft."
+        }
+      ],
+      "selectedVersionId": "ver-2"
+    }
+  ]
   "beats": []
   "toolkit_selection": [],
   "angles": []
