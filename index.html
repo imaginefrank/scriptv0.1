@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Script Ops Console</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="logo">Script Ops</div>
+    <div class="phase-indicator">
+      <span class="phase-label">Phase</span>
+      <div id="phase-badges" class="phase-badges"></div>
+    </div>
+    <div class="header-actions">
+      <button id="start-task" class="primary">Queue long-running task</button>
+      <div class="loading" id="global-loading" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="workflow" aria-label="Decision workflow">
+      <div class="controls">
+        <div class="control-block">
+          <h2>Filters</h2>
+          <p>Select filters that should be applied before progressing.</p>
+          <div class="options" id="filter-options">
+            <label><input type="checkbox" value="redaction" /> Redaction</label>
+            <label><input type="checkbox" value="anonymize" /> Anonymize PII</label>
+            <label><input type="checkbox" value="sentiment" /> Sentiment tagging</label>
+          </div>
+        </div>
+
+        <div class="control-block">
+          <h2>Toolkit</h2>
+          <p>Pick exactly one toolkit to use for this run.</p>
+          <div class="options" id="toolkit-options">
+            <label><input type="radio" name="toolkit" value="realtime" /> Real-time agent</label>
+            <label><input type="radio" name="toolkit" value="batch" /> Batch processor</label>
+            <label><input type="radio" name="toolkit" value="qa" /> Q&A helper</label>
+          </div>
+        </div>
+
+        <div class="control-block">
+          <h2>Variants</h2>
+          <p>Approve a variant before moving on.</p>
+          <select id="variant-select">
+            <option value="">Select a variant</option>
+            <option value="alpha">Alpha - Fast draft</option>
+            <option value="beta">Beta - Balanced</option>
+            <option value="gamma">Gamma - Safe</option>
+          </select>
+          <button id="approve-variant" class="secondary">Approve selection</button>
+        </div>
+
+        <div class="control-block">
+          <h2>Rollback</h2>
+          <p>Confirm rollback checkpoint when necessary.</p>
+          <label class="toggle">
+            <input type="checkbox" id="rollback-check" />
+            <span>Rollback point confirmed</span>
+          </label>
+        </div>
+
+        <div class="phase-navigation">
+          <button id="prev-phase" class="ghost">Previous</button>
+          <div class="phase-info">
+            <h3 id="current-phase"></h3>
+            <p id="phase-hint"></p>
+          </div>
+          <button id="next-phase" class="primary" disabled>Next phase</button>
+        </div>
+      </div>
+
+      <div class="workspace">
+        <div class="conversation">
+          <header>
+            <h2>Transcript</h2>
+            <div class="tags" id="transcript-tags"></div>
+          </header>
+          <div class="conversation-body" id="conversation-body"></div>
+          <div class="composer">
+            <textarea id="prompt-input" placeholder="Draft a prompt or response..."></textarea>
+            <button id="simulate-call" class="primary">Simulate API Call</button>
+          </div>
+        </div>
+        <div class="media-pane">
+          <header>
+            <h2>Clips</h2>
+            <div class="clip-actions">
+              <button id="pip-btn" class="secondary">Toggle PiP</button>
+              <button id="split-btn" class="ghost">Split-screen</button>
+            </div>
+          </header>
+          <div class="clip-display" id="clip-display">
+            <video id="clip-video" controls muted loop poster="https://interactive-examples.mdn.mozilla.net/media/examples/elephant-660-480.jpg">
+              <source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4" />
+              Your browser does not support embedded videos.
+            </video>
+            <div class="clip-note">
+              <p>Clips stay in view next to the transcript. Use Picture-in-Picture or split-screen mode.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sidebar" aria-label="Context sidebar">
+      <div class="sidebar-card">
+        <h3>Tags</h3>
+        <div id="sidebar-tags" class="tag-grid"></div>
+      </div>
+      <div class="sidebar-card">
+        <h3>Transcript summary</h3>
+        <p id="sidebar-summary"></p>
+      </div>
+      <div class="sidebar-card">
+        <h3>Sentiment</h3>
+        <div class="sentiment" id="sidebar-sentiment"></div>
+      </div>
+      <div class="sidebar-card">
+        <h3>Queue</h3>
+        <ul id="queue-list" class="queue-list"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="app-footer">
+    <div>
+      <strong>Token usage per call</strong>
+      <ul id="token-list" class="token-list"></ul>
+    </div>
+    <div class="totals" id="token-totals"></div>
+  </footer>
+
+  <template id="conversation-line">
+    <div class="line">
+      <div class="speaker"></div>
+      <div class="text"></div>
+      <div class="meta"></div>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
